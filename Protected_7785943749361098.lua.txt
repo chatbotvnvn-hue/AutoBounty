@@ -1,0 +1,737 @@
+--[[
+	Blox Fruits trường anh hud Auto Bounty Ultimate
+	Author: Trường Anh
+	Features: Fast Attack, Spam Skills, Auto Switch Weapons, Smooth Aim
+]]
+
+-- Load UI Library
+local redzlib = loadstring(game:HttpGet("https://raw.githubusercontent.com/tbao143/Library-ui/refs/heads/main/Redzhubui"))()
+
+local Window = redzlib:MakeWindow({
+  Title = "trường anh hud Auto Bounty | Ultimate",
+  SubTitle = "by Trường Anh | All Features",
+  SaveFolder = "AutoBountyV4_Ultimate"
+})
+
+-- Logo
+Window:AddMinimizeButton({
+    Button = { 
+        Image = "rbxassetid://132815391220143",
+        BackgroundTransparency = 0,
+        Size = UDim2.new(0, 50, 0, 50),
+        BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    },
+    Corner = { 
+        CornerRadius = UDim.new(0, 10)
+    },
+})
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Camera = workspace.CurrentCamera
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+local Backpack = LocalPlayer.Backpack
+
+-- Fast Attack Code (stored)
+_G.FastAttack = false
+local FastAttackCode = [[
+if _G.FastAttack then
+    local _ENV = (getgenv or getrenv or getfenv)()
+    local function SafeWaitForChild(parent, childName)
+        local success, result = pcall(function()
+            return parent:WaitForChild(childName)
+        end)
+        if not success or not result then
+            warn("Failed to find: " .. childName)
+        end
+        return result
+    end
+
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local Player = Players.LocalPlayer
+
+    if not Player then return end
+
+    local Remotes = SafeWaitForChild(ReplicatedStorage, "Remotes")
+    if not Remotes then return end
+
+    local Characters = SafeWaitForChild(workspace, "Characters")
+    local Enemies = SafeWaitForChild(workspace, "Enemies")
+
+    local Modules = SafeWaitForChild(ReplicatedStorage, "Modules")
+    local Net = SafeWaitForChild(Modules, "Net")
+
+    local Settings = {
+        AutoClick = true,
+        ClickDelay = 0
+    }
+
+    local Module = {}
+
+    Module.FastAttack = (function()
+        if _ENV.rz_FastAttack then
+            return _ENV.rz_FastAttack
+        end
+
+        local FastAttack = {
+            Distance = 100,
+            attackMobs = true,
+            attackPlayers = true,
+            Equipped = nil
+        }
+
+        local RegisterAttack = SafeWaitForChild(Net, "RE/RegisterAttack")
+        local RegisterHit = SafeWaitForChild(Net, "RE/RegisterHit")
+
+        local function IsAlive(character)
+            return character and character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0
+        end
+
+        local function ProcessEnemies(OthersEnemies, Folder)
+            local BasePart = nil
+            for _, Enemy in Folder:GetChildren() do
+                local Head = Enemy:FindFirstChild("Head")
+                if Head and IsAlive(Enemy) and Player:DistanceFromCharacter(Head.Position) < FastAttack.Distance then
+                    if Enemy ~= Player.Character then
+                        table.insert(OthersEnemies, { Enemy, Head })
+                        BasePart = Head
+                    end
+                end
+            end
+            return BasePart
+        end
+
+        function FastAttack:Attack(BasePart, OthersEnemies)
+            if not BasePart or #OthersEnemies == 0 then return end
+            RegisterAttack:FireServer(Settings.ClickDelay or 0)
+            RegisterHit:FireServer(BasePart, OthersEnemies)
+        end
+
+        function FastAttack:AttackNearest()
+            local OthersEnemies = {}
+            local Part1 = ProcessEnemies(OthersEnemies, Enemies)
+            local Part2 = ProcessEnemies(OthersEnemies, Characters)
+
+            local character = Player.Character
+            if not character then return end
+            local equippedWeapon = character:FindFirstChildOfClass("Tool")
+
+            if equippedWeapon and equippedWeapon:FindFirstChild("LeftClickRemote") then
+                for _, enemyData in ipairs(OthersEnemies) do
+                    local enemy = enemyData[1]
+                    local direction = (enemy.HumanoidRootPart.Position - character:GetPivot().Position).Unit
+                    pcall(function()
+                        equippedWeapon.LeftClickRemote:FireServer(direction, 1)
+                    end)
+                end
+            elseif #OthersEnemies > 0 then
+                self:Attack(Part1 or Part2, OthersEnemies)
+            else
+                task.wait(0)
+            end
+        end
+
+        function FastAttack:BladeHits()
+            local Equipped = IsAlive(Player.Character) and Player.Character:FindFirstChildOfClass("Tool")
+            if Equipped and Equipped.ToolTip ~= "Gun" then
+                self:AttackNearest()
+            else
+                task.wait(0)
+            end
+        end
+
+        task.spawn(function()
+            while task.wait(Settings.ClickDelay) do
+                if Settings.AutoClick then
+                    FastAttack:BladeHits()
+                end
+            end
+        end)
+
+        _ENV.rz_FastAttack = FastAttack
+        return FastAttack
+    end)()
+end
+
+local remote, idremote
+for _, v in next, ({game.ReplicatedStorage.Util, game.ReplicatedStorage.Common, game.ReplicatedStorage.Remotes, game.ReplicatedStorage.Assets, game.ReplicatedStorage.FX}) do
+    for _, n in next, v:GetChildren() do
+        if n:IsA("RemoteEvent") and n:GetAttribute("Id") then
+            remote, idremote = n, n:GetAttribute("Id")
+        end
+    end
+    v.ChildAdded:Connect(function(n)
+        if n:IsA("RemoteEvent") and n:GetAttribute("Id") then
+            remote, idremote = n, n:GetAttribute("Id")
+        end
+    end)
+end
+
+task.spawn(function()
+    while task.wait(0.05) do
+        local char = game.Players.LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local parts = {}
+        for _, x in ipairs({workspace.Enemies, workspace.Characters}) do
+            for _, v in ipairs(x and x:GetChildren() or {}) do
+                local hrp = v:FindFirstChild("HumanoidRootPart")
+                local hum = v:FindFirstChild("Humanoid")
+                if v ~= char and hrp and hum and hum.Health > 0 and (hrp.Position - root.Position).Magnitude <= 60 then
+                    for _, _v in ipairs(v:GetChildren()) do
+                        if _v:IsA("BasePart") and (hrp.Position - root.Position).Magnitude <= 60 then
+                            parts[#parts+1] = {v, _v}
+                        end
+                    end
+                end
+            end
+        end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if #parts > 0 and tool and (tool:GetAttribute("WeaponType") == "Melee" or tool:GetAttribute("WeaponType") == "Sword") then
+            pcall(function()
+                require(game.ReplicatedStorage.Modules.Net):RemoteEvent("RegisterHit", true)
+                game.ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer()
+                local head = parts[1][1]:FindFirstChild("Head")
+                if not head then return end
+                game.ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(head, parts, {}, tostring(game.Players.LocalPlayer.UserId):sub(2, 4) .. tostring(coroutine.running()):sub(11, 15))
+                cloneref(remote):FireServer(string.gsub("RE/RegisterHit", ".", function(c)
+                    return string.char(bit32.bxor(string.byte(c), math.floor(workspace:GetServerTimeNow() / 10 % 10) + 1))
+                end),
+                bit32.bxor(idremote + 909090, game.ReplicatedStorage.Modules.Net.seed:InvokeServer() * 2), head, parts)
+            end)
+        end
+    end
+end)
+]]
+
+-- Variables
+local AutoBountyEnabled = false
+local CurrentTarget = nil
+local MinBounty = 1000000
+local SpamSkills = true
+local AutoSwitch = true
+local SmoothAim = true
+local CurrentWeaponType = 1 -- 1=Gun, 2=Fruit, 3=Sword
+local WeaponTypes = {"Gun", "Fruit", "Sword"}
+local LastWeaponSwitch = tick()
+local WeaponSwitchDelay = 3 -- Switch every 3 seconds
+
+local Stats = {
+    Kills = 0,
+    Deaths = 0,
+    StartTime = tick()
+}
+
+local Connections = {}
+
+-- Skill Keys
+local SkillKeys = {
+    ["Fruit"] = {"Z", "X", "C", "V", "F"},
+    ["Sword"] = {"Z", "X"},
+    ["Gun"] = {"Z", "X"}
+}
+
+-- Anti AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), Camera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), Camera.CFrame)
+end)
+
+-- Anti Kick
+pcall(function()
+    local mt = getrawmetatable(game)
+    local old = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if tostring(method) == "Kick" or tostring(method) == "Ban" then
+            return
+        end
+        return old(self, ...)
+    end)
+end)
+
+-- Get Bounty
+local function GetBounty(player)
+    local bounty = 0
+    pcall(function()
+        if player:FindFirstChild("leaderstats") then
+            if player.leaderstats:FindFirstChild("Bounty") then
+                bounty = player.leaderstats["Bounty"].Value
+            elseif player.leaderstats:FindFirstChild("Honor") then
+                bounty = player.leaderstats["Honor"].Value
+            end
+        end
+    end)
+    return bounty
+end
+
+-- Check Valid Target
+local function IsValidTarget(player)
+    if not player or player == LocalPlayer then return false end
+    if not player.Character then return false end
+    
+    local character = player.Character
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not rootPart then return false end
+    if humanoid.Health <= 0 then return false end
+    if GetBounty(player) < MinBounty then return false end
+    if player.Team == LocalPlayer.Team and player.Team then return false end
+    
+    return true
+end
+
+-- Find Best Target
+local function FindBestTarget()
+    local bestTarget = nil
+    local highestBounty = 0
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if IsValidTarget(player) then
+            local bounty = GetBounty(player)
+            if bounty > highestBounty then
+                highestBounty = bounty
+                bestTarget = player
+            end
+        end
+    end
+    
+    return bestTarget
+end
+
+-- Get Weapon By Type
+local function GetWeaponByType(weaponType)
+    -- Check equipped first
+    local equipped = Character:FindFirstChildOfClass("Tool")
+    if equipped then
+        if weaponType == "Gun" and equipped.ToolTip == "Gun" then
+            return equipped
+        elseif weaponType == "Sword" and equipped.ToolTip == "Sword" then
+            return equipped
+        elseif weaponType == "Fruit" and equipped.ToolTip == "Blox Fruit" then
+            return equipped
+        end
+    end
+    
+    -- Check backpack
+    for _, tool in pairs(Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            if weaponType == "Gun" and tool.ToolTip == "Gun" then
+                return tool
+            elseif weaponType == "Sword" and tool.ToolTip == "Sword" then
+                return tool
+            elseif weaponType == "Fruit" and tool.ToolTip == "Blox Fruit" then
+                return tool
+            end
+        end
+    end
+    
+    return nil
+end
+
+-- Equip Weapon
+local function EquipWeapon(weaponType)
+    local weapon = GetWeaponByType(weaponType)
+    if weapon and weapon.Parent == Backpack then
+        Humanoid:EquipTool(weapon)
+        return true
+    elseif weapon and weapon.Parent == Character then
+        return true
+    end
+    return false
+end
+
+-- Auto Switch Weapons
+local function AutoSwitchWeapon()
+    if not AutoSwitch then return end
+    
+    if tick() - LastWeaponSwitch >= WeaponSwitchDelay then
+        CurrentWeaponType = CurrentWeaponType % 3 + 1
+        local weaponType = WeaponTypes[CurrentWeaponType]
+        
+        if EquipWeapon(weaponType) then
+            LastWeaponSwitch = tick()
+            
+            -- Notify weapon change
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "🔄 Weapon Switch",
+                Text = "Switched to " .. weaponType,
+                Duration = 1
+            })
+        end
+    end
+end
+
+-- Use Skill
+local function UseSkill(key)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, key, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, key, false, game)
+    end)
+end
+
+-- Spam Skills
+local function SpamAllSkills()
+    if not SpamSkills then return end
+    
+    local equipped = Character:FindFirstChildOfClass("Tool")
+    if not equipped then return end
+    
+    local weaponType = nil
+    if equipped.ToolTip == "Gun" then
+        weaponType = "Gun"
+    elseif equipped.ToolTip == "Sword" then
+        weaponType = "Sword"
+    elseif equipped.ToolTip == "Blox Fruit" then
+        weaponType = "Fruit"
+    end
+    
+    if weaponType and SkillKeys[weaponType] then
+        for _, key in pairs(SkillKeys[weaponType]) do
+            UseSkill(key)
+            task.wait(0.2)
+        end
+    end
+end
+
+-- Smooth Aim Function
+local function SmoothAimAt(target)
+    if not SmoothAim or not target or not target.Character then return end
+    
+    local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+    local targetHead = target.Character:FindFirstChild("Head")
+    if not targetRoot then return end
+    
+    -- Smooth character rotation
+    local lookDirection = (targetRoot.Position - RootPart.Position).Unit
+    local targetCFrame = CFrame.lookAt(RootPart.Position, RootPart.Position + lookDirection)
+    
+    local tween = TweenService:Create(
+        RootPart,
+        TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+        {CFrame = targetCFrame}
+    )
+    tween:Play()
+    
+    -- Smooth camera aim
+    if targetHead then
+        local cameraCFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
+        Camera.CFrame = Camera.CFrame:Lerp(cameraCFrame, 0.3)
+    end
+end
+
+-- Teleport To Target
+local function TeleportToTarget(targetPos)
+    pcall(function()
+        local distance = (targetPos.Position - RootPart.Position).Magnitude
+        
+        if distance > 20 then
+            -- Instant TP if far
+            RootPart.CFrame = targetPos
+        else
+            -- Smooth tween if close
+            local tween = TweenService:Create(
+                RootPart,
+                TweenInfo.new(0.3, Enum.EasingStyle.Linear),
+                {CFrame = targetPos}
+            )
+            tween:Play()
+        end
+    end)
+end
+
+-- Main Hunt Loop
+local function BountyHuntLoop()
+    -- Enable Fast Attack
+    _G.FastAttack = true
+    loadstring(FastAttackCode)()
+    
+    while AutoBountyEnabled do
+        CurrentTarget = FindBestTarget()
+        
+        if CurrentTarget and CurrentTarget.Character then
+            local targetRoot = CurrentTarget.Character:FindFirstChild("HumanoidRootPart")
+            local targetHum = CurrentTarget.Character:FindFirstChild("Humanoid")
+            
+            if targetRoot and targetHum and targetHum.Health > 0 then
+                -- Auto switch weapon
+                AutoSwitchWeapon()
+                
+                -- Calculate position
+                local distance = (targetRoot.Position - RootPart.Position).Magnitude
+                local behindPos = targetRoot.CFrame * CFrame.new(0, 0, 7)
+                
+                -- Teleport to target
+                TeleportToTarget(behindPos)
+                
+                -- Smooth aim
+                SmoothAimAt(CurrentTarget)
+                
+                -- Spam skills
+                SpamAllSkills()
+                
+                -- Click attack (M1)
+                pcall(function()
+                    for i = 1, 3 do
+                        mouse1click()
+                        task.wait(0.05)
+                    end
+                end)
+                
+                -- Check if killed
+                if targetHum.Health <= 0 then
+                    Stats.Kills = Stats.Kills + 1
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "☠️ Eliminated",
+                        Text = CurrentTarget.Name .. " killed!",
+                        Duration = 3
+                    })
+                    CurrentTarget = nil
+                    task.wait(2)
+                end
+            end
+        else
+            -- No target found
+            task.wait(3)
+        end
+        
+        task.wait(0.1)
+    end
+    
+    _G.FastAttack = false
+end
+
+-- Create Tabs
+local MainTab = Window:MakeTab({"Main", "sword"})
+local CombatTab = Window:MakeTab({"Combat", "swords"})
+local SettingsTab = Window:MakeTab({"Settings", "settings"})
+local StatsTab = Window:MakeTab({"Stats", "list"})
+
+-- Main Tab
+local AutoSection = MainTab:AddSection({"⚔️ Auto Bounty Hunt"})
+
+MainTab:AddToggle({
+    Name = "Enable Auto Bounty",
+    Description = "Hunt with all features",
+    Default = false,
+    Callback = function(value)
+        AutoBountyEnabled = value
+        
+        if value then
+            -- Update character
+            Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            Humanoid = Character:WaitForChild("Humanoid")
+            RootPart = Character:WaitForChild("HumanoidRootPart")
+            Backpack = LocalPlayer.Backpack
+            
+            Connections.MainLoop = task.spawn(BountyHuntLoop)
+            
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "✅ Auto Bounty",
+                Text = "All systems activated!",
+                Duration = 3
+            })
+        else
+            if Connections.MainLoop then
+                task.cancel(Connections.MainLoop)
+            end
+            _G.FastAttack = false
+            CurrentTarget = nil
+            
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "❌ Stopped",
+                Text = "Auto Bounty Disabled",
+                Duration = 3
+            })
+        end
+    end
+})
+
+local StatusSection = MainTab:AddSection({"📊 Status"})
+
+local StatusLabel = MainTab:AddParagraph({"Status", "🔴 Inactive"})
+local TargetLabel = MainTab:AddParagraph({"Target", "None"})
+local BountyLabel = MainTab:AddParagraph({"Bounty", "$0"})
+local WeaponLabel = MainTab:AddParagraph({"Weapon", "None"})
+
+-- Combat Tab
+local AttackSection = CombatTab:AddSection({"⚙️ Combat Settings"})
+
+CombatTab:AddToggle({
+    Name = "Spam Skills",
+    Description = "Auto use all skills",
+    Default = true,
+    Callback = function(value)
+        SpamSkills = value
+    end
+})
+
+CombatTab:AddToggle({
+    Name = "Auto Switch Weapons",
+    Description = "Gun -> Fruit -> Sword",
+    Default = true,
+    Callback = function(value)
+        AutoSwitch = value
+    end
+})
+
+CombatTab:AddToggle({
+    Name = "Smooth Aim",
+    Description = "Smooth aiming at target",
+    Default = true,
+    Callback = function(value)
+        SmoothAim = value
+    end
+})
+
+CombatTab:AddSlider({
+    Name = "Weapon Switch Delay",
+    Min = 1,
+    Max = 10,
+    Default = 3,
+    Callback = function(value)
+        WeaponSwitchDelay = value
+    end
+})
+
+CombatTab:AddToggle({
+    Name = "Fast Attack Only",
+    Description = "Enable Fast Attack without hunt",
+    Default = false,
+    Callback = function(value)
+        _G.FastAttack = value
+        if value then
+            loadstring(FastAttackCode)()
+        end
+    end
+})
+
+-- Settings Tab
+local FilterSection = SettingsTab:AddSection({"🎯 Target Settings"})
+
+SettingsTab:AddSlider({
+    Name = "Minimum Bounty",
+    Min = 0,
+    Max = 30000000,
+    Increase = 250000,
+    Default = 1000000,
+    Callback = function(value)
+        MinBounty = value
+    end
+})
+
+-- Player ESP
+SettingsTab:AddToggle({
+    Name = "Player ESP",
+    Default = false,
+    Callback = function(value)
+        if value then
+            Connections.ESP = RunService.Heartbeat:Connect(function()
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        if not player.Character:FindFirstChild("BountyESP") then
+                                                                                              local esp = Instance.new("Highlight")
+                            esp.Name = "BountyESP"
+                            esp.Parent = player.Character
+                            
+                            if GetBounty(player) >= MinBounty then
+                                esp.FillColor = Color3.new(1, 0, 0)
+                            else
+                                esp.FillColor = Color3.new(0, 1, 0)
+                            end
+                            esp.FillTransparency = 0.5
+                        end
+                    end
+                end
+            end)
+        else
+         if Connections.ESP then
+                Connections.ESP:Disconnect()
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character and player.Character:FindFirstChild("BountyESP") then
+                        player.Character.BountyESP:Destroy()
+                    end
+                end
+            end
+        end
+    end
+})
+
+-- Stats Tab
+local SessionSection = StatsTab:AddSection({"📈 Session Stats"})
+
+local KillsLabel = StatsTab:AddParagraph({"Kills", "0"})
+local DeathsLabel = StatsTab:AddParagraph({"Deaths", "0"})
+local TimeLabel = StatsTab:AddParagraph({"Time", "0 min"})
+
+-- Update Loop
+task.spawn(function()
+    while true do
+        task.wait(1)
+        
+        if AutoBountyEnabled then
+            StatusLabel:Set({"Status", "🟢 Hunting"})
+        else
+            StatusLabel:Set({"Status", "🔴 Inactive"})
+        end
+        
+         if CurrentTarget then
+            TargetLabel:Set({"Target", CurrentTarget.Name})
+            BountyLabel:Set({"Bounty", "$" .. GetBounty(CurrentTarget)})
+        else
+            TargetLabel:Set({"Target", "None"})
+            BountyLabel:Set({"Bounty", "$0"})
+        end
+        
+        -- Current weapon
+        local equipped = Character:FindFirstChildOfClass("Tool")
+        if equipped then
+            WeaponLabel:Set({"Weapon", equipped.Name})
+        else
+            WeaponLabel:Set({"Weapon", "None"})
+        end
+         
+         KillsLabel:Set({"Kills", tostring(Stats.Kills)})
+        DeathsLabel:Set({"Deaths", tostring(Stats.Deaths)})
+        
+        local elapsed = math.floor((tick() - Stats.StartTime) / 60)
+        TimeLabel:Set({"Time", elapsed .. " min"})
+    end
+end)
+
+-- Character Handler
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid")
+    RootPart = newChar:WaitForChild("HumanoidRootPart")
+    Backpack = LocalPlayer.Backpack
+    Stats.Deaths = Stats.Deaths + 1
+    
+    -- Re-enable if was active
+    if AutoBountyEnabled then
+        task.wait(3)
+        if Connections.MainLoop then
+            task.cancel(Connections.MainLoop)
+        end
+        Connections.MainLoop = task.spawn(BountyHuntLoop)
+    end
+end)
+
+Window:SelectTab(MainTab)
+print("trường anh hud Auto Bounty Ultimate - by Trường Anh")
